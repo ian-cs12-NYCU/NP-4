@@ -90,6 +90,7 @@ class session : public std::enable_shared_from_this<session>{
 				socket2_, endpoint_,
 				[this, self](boost::system::error_code ec, tcp::endpoint ed){
 					if(!ec){
+						std::cout << "connect success : IP: " << ed.address().to_string() << "   Port: " << ed.port() << '\n' << flush;
 						do_write_reply();
 						do_read1_data();
 						do_read2_data();
@@ -125,6 +126,8 @@ class session : public std::enable_shared_from_this<session>{
 				boost::asio::buffer(data_, max_length), 
 				[this, self](boost::system::error_code ec, std::size_t length){
 					if (!ec){
+						std::cout << "read1 data success \n" << flush;
+						std::cout << " --------------  1 data: ------------" << data_ << "\n\n\n\n" << flush;
 						do_write2_data(length);
 					}else{
 						socket1_.close();
@@ -142,6 +145,7 @@ class session : public std::enable_shared_from_this<session>{
 				boost::asio::buffer(data_, max_length), 
 				[this, self](boost::system::error_code ec, std::size_t length){
 					if (!ec){
+						std::cout << "read2 data success \n" << flush;
 						do_write1_data(length);
 					}else{
 						socket1_.close();

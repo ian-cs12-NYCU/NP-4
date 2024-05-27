@@ -36,6 +36,8 @@ class session : public std::enable_shared_from_this<session> {
                     if (!ec){
                         std::string str(data_);
                         parse_request(length);
+                        memset(data_, '\0', length);
+
                         do_firewall();
 
                         //TODO: reply to client
@@ -65,15 +67,16 @@ class session : public std::enable_shared_from_this<session> {
         void do_connect_command() {
             auto self(shared_from_this());
             tcp::resolver resolver(io_context_);
-            tcp::resolver::query query(print_out_info.DST_IP, print_out_info.DST_Port);
-            async_connect(target_socket, resolver.resolve(query),
+            tcp::resolver::results_type result_endpoint = resolver.resolve(print_out_info.DST_IP, print_out_info.DST_Port);
+            async_connect(target_socket, result_endpoint,
                 [this, self](boost::system::error_code ec, tcp::endpoint endpoint){
                     if (!ec){
                         #ifdef DEBUG
-                            std::cout << "Connect to target success\n";
+                            std::cout << "Connect to target success: IP=" << endpoint.address().to_string() << " Port=" << endpoint.port() << "\n";
                         #endif
                         do_success_reply();
-                        // TODO: read data from client & target
+                        read_from_client();
+                        read_from_target();
                     } else {
                         #ifdef DEBUG
                             std::cerr << "Connect to target failed\n";
@@ -88,6 +91,8 @@ class session : public std::enable_shared_from_this<session> {
         void do_bind_command() {
             // TODO
         }
+
+        /* SOCK server reply success connection to client*/
         void do_success_reply() {
             char reply[8];
             reply[0] = 0;
@@ -126,6 +131,83 @@ class session : public std::enable_shared_from_this<session> {
             );
         }
 
+        void read_from_client() {
+            auto self(shared_from_this());
+            memset(data_, '\0', max_length);
+            client_socket.async_read_some(
+                boost::asio::buffer(data_, max_length),
+                [this, self](boost::system::error_code ec, std::size_t length){
+                    if (!ec){
+                        #ifdef DEBUG
+                            std::cout << "[success] client -------> 【proxy】    target\n";
+                            std::cout << "-------client data---------" << data_ << "\n\n\n";
+                        #endif
+                        write_to_target(length);
+                    } else {
+                        #ifdef DEBUG
+                            std:: cout << "[!FAILD] client -------> 【proxy】    target\n";
+                            std::cerr << "Error: " << ec.message() << "\n";
+                        #endif
+                        target_socket.close();
+                        client_socket.close();
+                        exit(0);
+                    }
+                }
+            );
+
+        }
+
+        void read_from_target() {
+            auto self(shared_from_this());
+            memset(data_, '\0', max_length);
+            target_socket.async_read_some(
+                boost::asio::buffer(data_, max_length),
+                [this, self](boost::system::error_code ec, std::size_t length){
+                    if (!ec){
+                        #ifdef DEBUG
+                            std::cout << "[success] client      【proxy】 ------> target\n";
+                        #endif
+                        write_to_client(length);
+                    } else {
+                        #ifdef DEBUG
+                            std::cout << "[!FAILD] client      【proxy】 ------> target\n";
+                            std::cerr << "Error: " << ec.message() << "\n";
+                        #endif
+                        target_socket.close();
+                        client_socket.close();
+                        exit(0);
+                    }
+                }
+            );
+        }
+
+        void write_to_client(size_t length) {
+            auto self(shared_from_this());
+            async_write(client_socket, buffer(data_, length),
+                [this, self](boost::system::error_code ec, std::size_t length){
+                    if (!ec){
+                        #ifdef DEBUG
+                            std::cout << "[success] client <------ 【proxy】      target\n";
+                        #endif
+                        read_from_target();
+                    }
+                }
+            );
+
+        }
+        void write_to_target(size_t length) {
+            auto self(shared_from_this());
+            async_write(target_socket, buffer(data_, length),
+                [this, self](boost::system::error_code ec, std::size_t length){
+                    if (!ec){
+                        #ifdef DEBUG
+                            std::cout << "[success] client      【proxy】 ------> target\n";
+                        #endif
+                        read_from_client();
+                    }
+                }
+            );
+        }
         void parse_request(std::size_t length){
             int VN = data_[0];
             int CD = data_[1];
