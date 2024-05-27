@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <arpa/inet.h>
+#include <regex>
 
 using boost::asio::ip::tcp;
 using namespace boost::asio;
@@ -145,7 +146,7 @@ class session : public std::enable_shared_from_this<session> {
                         write_to_target(length);
                     } else {
                         #ifdef DEBUG
-                            std:: cout << "[!FAILD] client -------> 【proxy】    target\n";
+                            std:: cout << "[!FAILD] client ----> 【proxy】    target\n";
                             std::cerr << "Error: " << ec.message() << "\n";
                         #endif
                         target_socket.close();
@@ -187,7 +188,7 @@ class session : public std::enable_shared_from_this<session> {
                 [this, self](boost::system::error_code ec, std::size_t length){
                     if (!ec){
                         #ifdef DEBUG
-                            std::cout << "[success] client <---- 【proxy】      target\n";
+                            std::cout << "[success] client <----【proxy】      target\n";
                         #endif
                         read_from_target();
                     }
@@ -220,7 +221,9 @@ class session : public std::enable_shared_from_this<session> {
                 std::cout << "original DST_IP: " << print_out_info.DST_IP << "\n";
             #endif
             
-            if (print_out_info.DST_IP == "0.0.0.1") { //need to resolve domain name
+            std::regex pattern("^0\\.0\\.0\\.\\d+$");
+
+            if ( std::regex_match(print_out_info.DST_IP, pattern) ) { //need to resolve domain name
                 size_t null_pos_after_userid;  //the null after optional variable "user_id"
                 size_t null_pos_after_domain;
                 for(null_pos_after_userid = 8; null_pos_after_userid < length; ++null_pos_after_userid){
