@@ -76,7 +76,7 @@ class session : public std::enable_shared_from_this<session> {
                         #ifdef DEBUG
                             std::cout << "Connect to target success: IP=" << endpoint.address().to_string() << " Port=" << endpoint.port() << "\n";
                         #endif
-                        do_success_reply();
+                        connect_success_reply();
                         read_from_client();
                         read_from_target();
                     } else {
@@ -91,25 +91,49 @@ class session : public std::enable_shared_from_this<session> {
             );
         }
         void do_bind_command() {
-            // TODO
+            // construct a new acceptor to bind to a random port
+            tcp::acceptor acceptor_(io_context_, tcp::endpoint(tcp::v4(), 0));
+            acceptor_.listen();
+            unsigned short port = acceptor_.local_endpoint().port();
+
+            bind_success_reply(port);
+
+            // accept "Active Connect" from Target
+            acceptor_.accept(target_socket);
+            read_from_client();
+            read_from_target();
         }
 
         /* SOCK server reply success connection to client*/
-        void do_success_reply() {
+        void connect_success_reply() {
             char reply[8];
             reply[0] = 0;
             reply[1] = 90;
-            // std::string dest_ip = print_out_info.DST_IP;
-            // std::string dest_port = print_out_info.DST_Port;
-            // std::memcpy(&reply[2], &dest_port[0], dest_port.size());
-            // std::memcpy(&reply[4], &dest_ip[0], dest_ip.size());
 
             auto self(shared_from_this());
             async_write(client_socket, buffer(reply, 8),
                 [this, self](boost::system::error_code ec, std::size_t length){
                     if (!ec){
                         #ifdef DEBUG
-                            std::cout << "[Success Reply] Reply to client 90\n";
+                            std::cout << "[Connect Success Reply] Reply to client 90\n";
+                        #endif
+                    }
+                }
+            );
+        }
+        void bind_success_reply(unsigned short port) {
+            char reply[8];
+            reply[0] = 0;
+            reply[1] = 90;
+            reply[2] = (port & 0xFF00) >> 8;
+            reply[3] = port & 0xFF;
+
+            auto self(shared_from_this());
+            async_write(client_socket, buffer(reply, 8),
+                [this, self](boost::system::error_code ec, std::size_t length){
+                    if (!ec){
+                        #ifdef DEBUG
+                            std::cout << "[Bind Success Reply] Reply to client 90\n";
                         #endif
                     }
                 }
@@ -158,7 +182,6 @@ class session : public std::enable_shared_from_this<session> {
             );
 
         }
-
         void read_from_target() {
             auto self(shared_from_this());
             memset(data_, '\0', max_length);
