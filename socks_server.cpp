@@ -165,12 +165,12 @@ class session : public std::enable_shared_from_this<session> {
                 [this, self](boost::system::error_code ec, std::size_t length){
                     if (!ec){
                         #ifdef DEBUG
-                            std::cout << "[success] client      【proxy】 ------> target\n";
+                            std::cout << "[success] client      【proxy】<---- target\n";
                         #endif
                         write_to_client(length);
                     } else {
                         #ifdef DEBUG
-                            std::cout << "[!FAILD] client      【proxy】 ------> target\n";
+                            std::cout << "[!FAILD] client      【proxy】 <---- target\n";
                             std::cerr << "Error: " << ec.message() << "\n";
                         #endif
                         target_socket.close();
@@ -187,7 +187,7 @@ class session : public std::enable_shared_from_this<session> {
                 [this, self](boost::system::error_code ec, std::size_t length){
                     if (!ec){
                         #ifdef DEBUG
-                            std::cout << "[success] client <------ 【proxy】      target\n";
+                            std::cout << "[success] client <---- 【proxy】      target\n";
                         #endif
                         read_from_target();
                     }
@@ -201,7 +201,7 @@ class session : public std::enable_shared_from_this<session> {
                 [this, self](boost::system::error_code ec, std::size_t length){
                     if (!ec){
                         #ifdef DEBUG
-                            std::cout << "[success] client      【proxy】 ------> target\n";
+                            std::cout << "[success] client      【proxy】----> target\n";
                         #endif
                         read_from_client();
                     }

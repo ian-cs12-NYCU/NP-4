@@ -130,6 +130,7 @@ class session : public std::enable_shared_from_this<session>{
 						std::cout << " --------------  1 data: ------------" << data_ << "\n\n\n\n" << flush;
 						do_write2_data(length);
 					}else{
+						std::cout << "read1 data fail \n" << "error message:" << ec.message() << flush;
 						socket1_.close();
 						socket2_.close();
 						exit(0);
