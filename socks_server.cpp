@@ -2,6 +2,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <iostream>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <arpa/inet.h>
@@ -20,7 +21,7 @@ struct SOCKS_print_info{
 
 class session : public std::enable_shared_from_this<session> {
     public:
-        session(io_context& ic, tcp::socket socket) : io_context_(ic),client_socket(std::move(socket)){}
+        session(io_context& ic, tcp::socket socket) : io_context_(ic), client_socket(std::move(socket)), target_socket(ic){}
 
         void start(){
             do_read();
@@ -35,22 +36,91 @@ class session : public std::enable_shared_from_this<session> {
                     if (!ec){
                         std::string str(data_);
                         parse_request(length);
-                        
-                        
-                        do_write(length);
+                        do_firewall();
+
+                        //TODO: reply to client
+                        // according to "connect", "bind"
+                        do_reply();
                     }
                 }
             );
         }
-
-        void do_write(std::size_t length){
+        void do_reply(){
             auto self(shared_from_this());
-            boost::asio::async_write(
-                client_socket,
-                boost::asio::buffer(data_, length),
-                [this, self](boost::system::error_code ec, std::size_t /*length*/){
+            // ---------------------Reject Reply-------------
+            if (print_out_info.reply == "Reject"){
+                do_error_reply();
+            }
+            // ---------------------Accept Reply-------------
+            else if (print_out_info.reply == "Connect"){
+                if (print_out_info.command == "CONNECT"){
+                    do_connect_command();
+                } else if (print_out_info.command == "BIND"){
+                    do_bind_command();
+                }
+                
+            }
+        }
+
+        void do_connect_command() {
+            auto self(shared_from_this());
+            tcp::resolver resolver(io_context_);
+            tcp::resolver::query query(print_out_info.DST_IP, print_out_info.DST_Port);
+            async_connect(target_socket, resolver.resolve(query),
+                [this, self](boost::system::error_code ec, tcp::endpoint endpoint){
                     if (!ec){
-                        do_read();
+                        #ifdef DEBUG
+                            std::cout << "Connect to target success\n";
+                        #endif
+                        do_success_reply();
+                        // TODO: read data from client & target
+                    } else {
+                        #ifdef DEBUG
+                            std::cerr << "Connect to target failed\n";
+                        #endif
+                        do_error_reply();
+                        client_socket.close();
+                        target_socket.close();
+                    }
+                }
+            );
+        }
+        void do_bind_command() {
+            // TODO
+        }
+        void do_success_reply() {
+            char reply[8];
+            reply[0] = 0;
+            reply[1] = 90;
+            // std::string dest_ip = print_out_info.DST_IP;
+            // std::string dest_port = print_out_info.DST_Port;
+            // std::memcpy(&reply[2], &dest_port[0], dest_port.size());
+            // std::memcpy(&reply[4], &dest_ip[0], dest_ip.size());
+
+            auto self(shared_from_this());
+            async_write(client_socket, buffer(reply, 8),
+                [this, self](boost::system::error_code ec, std::size_t length){
+                    if (!ec){
+                        #ifdef DEBUG
+                            std::cout << "[Success Reply] Reply to client 90\n";
+                        #endif
+                    }
+                }
+            );
+        }
+        void do_error_reply() {
+            char reply[8];
+            reply[0] = 0;
+            reply[1] = 91;
+            auto self(shared_from_this());
+            async_write(client_socket, buffer(reply, 8),
+                [this, self](boost::system::error_code ec, std::size_t length){
+                    if (!ec){
+                        #ifdef DEBUG
+                            std::cout << "Reply to client 91 & exit(0)\n";
+                        #endif
+                        client_socket.close();
+                        exit(0);
                     }
                 }
             );
@@ -121,8 +191,26 @@ class session : public std::enable_shared_from_this<session> {
 
         }
 
+        void do_firewall() {
+            if (print_out_info.reply == "Reject"){
+                return;
+            }
+
+            std::ifstream in_file("./socks.conf");
+            if (!in_file.is_open()){
+                std::cerr << "Cannot open socks.conf\n";
+                return;
+            }
+
+            std::string line;
+            while (std::getline(in_file, line)){
+                
+            }
+
+        }
         io_context &io_context_;
         tcp::socket client_socket;
+        tcp::socket target_socket;
         struct SOCKS_print_info print_out_info;
         enum { max_length = 4096 };
         char data_[max_length];
