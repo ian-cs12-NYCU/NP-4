@@ -15,3 +15,6 @@ socks_server: socks_server.cpp
 
 socks_server2 : socks_server_2.cpp
 	$(CXX) $(CXXFLAGS) $(CXX_INCLUDE_PARAMS) $(CXX_LIB_PARAMS) -o socks_server2 socks_server_2.cpp
+
+test: test.cpp
+	$(CXX) $(CXXFLAGS) $(CXX_INCLUDE_PARAMS) $(CXX_LIB_PARAMS) -o test test.cpp

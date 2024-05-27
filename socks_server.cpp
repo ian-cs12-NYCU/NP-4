@@ -11,7 +11,11 @@
 using boost::asio::ip::tcp;
 using namespace boost::asio;
 
+#define REJECT_MSG "Reject"
+#define ACCEPT_MSG "Accept"
+
 struct SOCKS_print_info{
+    int CD;
     std::string SRC_IP;
     std::string SRC_Port;
     std::string DST_IP;
@@ -40,9 +44,6 @@ class session : public std::enable_shared_from_this<session> {
                         memset(data_, '\0', length);
 
                         do_firewall();
-
-                        //TODO: reply to client
-                        // according to "connect", "bind"
                         do_reply();
                     }
                 }
@@ -51,11 +52,11 @@ class session : public std::enable_shared_from_this<session> {
         void do_reply(){
             auto self(shared_from_this());
             // ---------------------Reject Reply-------------
-            if (print_out_info.reply == "Reject"){
+            if (print_out_info.reply == REJECT_MSG){
                 do_error_reply();
             }
             // ---------------------Accept Reply-------------
-            else if (print_out_info.reply == "Connect"){
+            else if (print_out_info.reply == ACCEPT_MSG){
                 if (print_out_info.command == "CONNECT"){
                     do_connect_command();
                 } else if (print_out_info.command == "BIND"){
@@ -211,7 +212,7 @@ class session : public std::enable_shared_from_this<session> {
         }
         void parse_request(std::size_t length){
             int VN = data_[0];
-            int CD = data_[1];
+            print_out_info.CD = data_[1];
             
             struct in_addr ip_addr;
             std::memcpy(&ip_addr, &data_[4], 4);
@@ -247,9 +248,9 @@ class session : public std::enable_shared_from_this<session> {
             print_out_info.SRC_Port = std::to_string(client_socket.remote_endpoint().port());
 
             // --------------- command---------------------
-            if (CD == 1){
+            if (print_out_info.CD == 1){
                 print_out_info.command = "CONNECT";
-            } else if (CD == 2){
+            } else if (print_out_info.CD == 2){
                 print_out_info.command = "BIND";
             } else {
                 print_out_info.command = "UNKNOWN";
@@ -260,9 +261,9 @@ class session : public std::enable_shared_from_this<session> {
 
             // ------------- reply-------------------
             if (VN != 4 || length < 8){
-                print_out_info.reply = "Reject";
+                print_out_info.reply = REJECT_MSG;
             } else {
-                print_out_info.reply = "Connect";
+                print_out_info.reply = ACCEPT_MSG;
             }
             
 
@@ -277,9 +278,7 @@ class session : public std::enable_shared_from_this<session> {
         }
 
         void do_firewall() {
-            if (print_out_info.reply == "Reject"){
-                return;
-            }
+            if (print_out_info.reply == REJECT_MSG) return;
 
             std::ifstream in_file("./socks.conf");
             if (!in_file.is_open()){
@@ -289,9 +288,56 @@ class session : public std::enable_shared_from_this<session> {
 
             std::string line;
             while (std::getline(in_file, line)){
+                std::istringstream iss(line);
+                std::vector<std::string> tokens;
+                std::string token;
+                while (iss >> token) {
+                    tokens.push_back(token);
+                }
                 
+                assert(tokens.size() == 3);
+                assert(tokens[0] == "permit");
+                assert(tokens[1] == "c" || tokens[1] == "b");
+                if (print_out_info.CD == 1 ) { //connect
+                    if (tokens[1] != "c") continue;
+                } else if (print_out_info.CD == 2) { //bind
+                    if (tokens[1] != "b") continue;
+                } 
+
+                std::string rule = tokens[2];
+                std::string regex_pattern_str;
+                for (char c : rule) {
+                    switch (c) {
+                        case '.':
+                            regex_pattern_str += "\\.";
+                            break;
+                        case '*':
+                            regex_pattern_str += "\\d+";
+                            break;
+                        default:
+                            regex_pattern_str += c;
+                            break;
+                    }
+                }
+                regex_pattern_str = "^" + regex_pattern_str + "$";
+
+                std::regex regex_pattern(regex_pattern_str);
+
+                if(std::regex_match(print_out_info.DST_IP, regex_pattern)){
+                    #ifdef DEBUG
+                        std::cout << "print_out_info.DST_IP: " << print_out_info.DST_IP << "  mapped " << line <<"\n";
+                        std::cout << "Accept !\n";
+                    #endif
+                    print_out_info.reply = ACCEPT_MSG;
+                    return;
+                }
             }
 
+            // not found any mapping rule
+            #ifdef DEBUG
+                std::cout << "No mapping rule found -> Reject\n";
+            #endif
+            print_out_info.reply = REJECT_MSG;
         }
         io_context &io_context_;
         tcp::socket client_socket;
