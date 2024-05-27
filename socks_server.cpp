@@ -236,18 +236,28 @@ class session : public std::enable_shared_from_this<session> {
         void parse_request(std::size_t length){
             int VN = data_[0];
             print_out_info.CD = data_[1];
+            #ifdef DEBUG
+                std::cout << "SOCKS request raw data: ";
+                for (size_t i = 0; i < length; ++i) {
+                    std::cout << std::hex << static_cast<int>(data_[i]) << " ";
+                }
+                std::cout << std::dec << std::endl;
+            #endif
             
             struct in_addr ip_addr;
             std::memcpy(&ip_addr, &data_[4], 4);
             print_out_info.DST_IP = inet_ntoa(ip_addr);
             print_out_info.DST_Port = std::to_string((unsigned short)(data_[2] << 8) + data_[3]);
-            #ifdef DEBUG
-                std::cout << "original DST_IP: " << print_out_info.DST_IP << "\n";
-            #endif
+           
             
             std::regex pattern("^0\\.0\\.0\\.\\d+$");
 
             if ( std::regex_match(print_out_info.DST_IP, pattern) ) { //need to resolve domain name
+                
+                #ifdef DEBUG
+                    std::cout << "Need to resolve domain name: original DST_IP: " << print_out_info.DST_IP << "\n";
+                #endif
+
                 size_t null_pos_after_userid;  //the null after optional variable "user_id"
                 size_t null_pos_after_domain;
                 for(null_pos_after_userid = 8; null_pos_after_userid < length; ++null_pos_after_userid){
@@ -259,12 +269,14 @@ class session : public std::enable_shared_from_this<session> {
                 
                 std::string domain_name(&data_[null_pos_after_userid + 1], &data_[null_pos_after_domain]);
                 tcp::resolver resolver(io_context_);
-                tcp::endpoint endpoint = resolver.resolve(domain_name, print_out_info.DST_Port) -> endpoint();
-                print_out_info.DST_IP = endpoint.address().to_string();
-
+                tcp::resolver::results_type results = resolver.resolve(domain_name, print_out_info.DST_Port);
+                tcp::endpoint endpoint = *results.begin();
                 #ifdef DEBUG
                     std::cout << "domain name: " << domain_name << "\n";
+                    std::cout << "resolve IP: " << endpoint.address().to_string() << "\n";
                 #endif
+                print_out_info.DST_IP = endpoint.address().to_string();
+
             } 
             
             print_out_info.SRC_IP = client_socket.remote_endpoint().address().to_string();
@@ -348,8 +360,7 @@ class session : public std::enable_shared_from_this<session> {
 
                 if(std::regex_match(print_out_info.DST_IP, regex_pattern)){
                     #ifdef DEBUG
-                        std::cout << "print_out_info.DST_IP: " << print_out_info.DST_IP << "  mapped " << line <<"\n";
-                        std::cout << "Accept !\n";
+                        std::cout << "print_out_info.DST_IP: " << print_out_info.DST_IP << "  mapped " << line <<"  ---> Accept!! \n";
                     #endif
                     print_out_info.reply = ACCEPT_MSG;
                     return;
@@ -358,7 +369,7 @@ class session : public std::enable_shared_from_this<session> {
 
             // not found any mapping rule
             #ifdef DEBUG
-                std::cout << "No mapping rule found -> Reject\n";
+                std::cout << "No mapping rule found -> Reject !!\n";
             #endif
             print_out_info.reply = REJECT_MSG;
         }
