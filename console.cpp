@@ -185,7 +185,25 @@ void Shell_Connector::send_request_to_SOCKS_server(int user_id) {
 }
 
 void Shell_Connector::read_reply_from_SOCKS() {
-
+    auto self(shared_from_this());
+    memset(data, 0, MAX_MESSAGE_LEN);
+    my_socket.async_read_some(
+        boost::asio::buffer(data, MAX_MESSAGE_LEN),
+        [this, self](const boost::system::error_code &ec, std::size_t length) {
+            if (!ec) {
+                if (data[0] == 0x00 && data[1] == 0x5a) {
+                    std::cout << "user-" << user_id << " connect to SOCKS server success\n";
+                    User_Info user_data = User_Info_Table::getInstance().user_info_table[user_id];
+                    open_file( user_data.file_path );
+                    do_read();
+                } else {
+                    #ifdef DEBUG
+                        std::cout << "user-" << user_id << " connect to SOCKS server fail\n";
+                    #endif
+                    my_socket.close();
+                }
+            } 
+        });
 }
 
 void Shell_Connector::do_read() {
@@ -197,7 +215,6 @@ void Shell_Connector::do_read() {
                 std::string msg(data, length);
                 memset(data, 0, MAX_MESSAGE_LEN);
 
-                // [TODO] send msg to html format by cout
                 send_shell_output(user_id, msg);
 
                 if (length != 0) {
