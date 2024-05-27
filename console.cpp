@@ -110,9 +110,9 @@ void Shell_Connector::resolve_handler() {
     auto self(shared_from_this());
 #ifndef DEBUG
     std::string URL =
-        User_Info_Table::getInstance().user_info_table[user_id].URL;
+        User_Info_Table::getInstance().SOCKS_Server_IP;
     std::string port =
-        User_Info_Table::getInstance().user_info_table[user_id].port;
+        User_Info_Table::getInstance().SOCKS_Server_port;
 #else
     std::string URL = "localhost";
     std::string port = "5555";
@@ -143,9 +143,7 @@ void Shell_Connector::connect_handler(
         endpoints->endpoint(),
         [this, self](const boost::system::error_code &ec) {
             if (!ec) {
-                std::cerr << "connect_handler success user-" << std::to_string(user_id) << "\n";
-                open_file(User_Info_Table::getInstance().user_info_table[user_id].file_path);
-                do_read();
+                send_request_to_SOCKS_server(user_id);
             } else {
                 std::cerr << "connect_handler user-" << std::to_string(user_id)
                           << " -------- error: " << ec.message() << std::endl;
@@ -154,21 +152,40 @@ void Shell_Connector::connect_handler(
         });
 }
 
-void Shell_Connector::send_request_to_socks() {
-    // char req[MAX_MESSAGE_LEN];
-    // req[0] = 0x04;
-    // req[1] = 0x01;
-    // req[2] = std::stoi(userData.port)/256;
-    // req[3] = std::stoi(userData.port)%256;
-    // req[4] = 0x00;
-    // req[5] = 0x00;
-    // req[6] = 0x00;
-    // req[7] = 0x01;
-    // req[8] = 0x00;
-    // for (int i = 0; i < (int)userData.url.length(); i++){
-    //     req[9 + i] = (unsigned char)htmlGen::getInstance().SOCKS_IP[i];
-    // }
-    // req[9 + userData.url.length()] = 0x00;
+void Shell_Connector::send_request_to_SOCKS_server(int user_id) {
+    
+    User_Info user_data = User_Info_Table::getInstance().user_info_table[user_id];
+    std::cerr << "send_request_to_SOCKS_server , user-" << user_id <<", addr=" << User_Info_Table::getInstance().SOCKS_Server_IP << ", port=" << user_data.port << "\n";
+    char req[MAX_MESSAGE_LEN];
+    memset(req, '\0', sizeof(MAX_MESSAGE_LEN));
+    req[0] = 0x04;
+    req[1] = 0x01;
+    req[2] = std::stoi(user_data.port)/256;
+    req[3] = std::stoi(user_data.port)%256;
+    req[4] = 0x00;
+    req[5] = 0x00;
+    req[6] = 0x00;
+    req[7] = 0x01;
+    req[8] = 0x00; //null
+    for (size_t i = 0; i < user_data.URL.length(); i++){
+        req[9 + i] = (unsigned char)(User_Info_Table::getInstance().SOCKS_Server_IP[i]);
+    }
+    req[9 + user_data.URL.length()] = 0x00;
+
+    auto self(shared_from_this());
+    async_write(my_socket, boost::asio::buffer(req, sizeof(char)*(10 + user_data.URL.length())),
+        [this, self](boost::system::error_code ec, std::size_t ){
+        if(!ec){
+            std::cerr << "send_request_to_SOCKS_server success\n";
+            read_reply_from_SOCKS();
+        }else{
+            my_socket.close();
+        }
+    });
+}
+
+void Shell_Connector::read_reply_from_SOCKS() {
+
 }
 
 void Shell_Connector::do_read() {

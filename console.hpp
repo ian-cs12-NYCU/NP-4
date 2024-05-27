@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
+#include <bitset>
 
 #define MAX_USERS 5
 #define MAX_MESSAGE_LEN 4096
@@ -61,7 +62,9 @@ class Shell_Connector : public std::enable_shared_from_this<Shell_Connector> {
 
     void resolve_handler();
     void connect_handler(boost::asio::ip::tcp::resolver::results_type endpoints);
-    void send_request_to_socks();
+    void send_request_to_SOCKS_server(int user_id);
+    void read_reply_from_SOCKS();
+
     void do_read();
     void do_write(std::string msg);
     void open_file(std::string file_name);
@@ -74,3 +77,5 @@ class Shell_Connector : public std::enable_shared_from_this<Shell_Connector> {
 void send_shell_output(int user_id, std::string content);
 void send_command_from_file(int user_id, std::string content);
 void send_basic_framwork();
+
+

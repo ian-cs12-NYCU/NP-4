@@ -7,6 +7,7 @@
 #include <string>
 #include <arpa/inet.h>
 #include <regex>
+#include <bitset>
 
 using boost::asio::ip::tcp;
 using namespace boost::asio;
@@ -239,15 +240,21 @@ class session : public std::enable_shared_from_this<session> {
             #ifdef DEBUG
                 std::cout << "SOCKS request raw data: ";
                 for (size_t i = 0; i < length; ++i) {
-                    std::cout << std::hex << static_cast<int>(data_[i]) << " ";
+                    unsigned char byte = data_[i];
+                    std::bitset<8> bits(byte);
+                    std::cout << bits << " ";
                 }
-                std::cout << std::dec << std::endl;
+                std::cout << "\n";
             #endif
             
             struct in_addr ip_addr;
             std::memcpy(&ip_addr, &data_[4], 4);
             print_out_info.DST_IP = inet_ntoa(ip_addr);
-            print_out_info.DST_Port = std::to_string((unsigned short)(data_[2] << 8) + data_[3]);
+            #ifdef DEBUG
+                std::cout << "high byte of port: " <<  (unsigned int)((unsigned char) data_[2] << 8) << "\n";
+                std::cout << "low byte of port: " <<  (unsigned int)((unsigned char) data_[3]) << "\n";
+            #endif
+            print_out_info.DST_Port = std::to_string((unsigned int)((unsigned char) data_[2] << 8) + (unsigned int)((unsigned char) data_[3]));
            
             
             std::regex pattern("^0\\.0\\.0\\.\\d+$");
