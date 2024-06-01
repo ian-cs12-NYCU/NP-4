@@ -130,6 +130,16 @@ class session : public std::enable_shared_from_this<session> {
             reply[3] = port & 0xFF;
 
             auto self(shared_from_this());
+            std::cout << "SOCKS BIND reply (port:" << port << ") raw data:  client <---- 【proxy】    target\n";
+            for (size_t i = 0; i < 8; ++i) {
+                unsigned char byte = data_[i];
+                std::bitset<8> bits(byte);
+                std::cout << bits << " ";
+            }
+            std::cout << "\n";
+
+
+            
             async_write(client_socket, buffer(reply, 8),
                 [this, self](boost::system::error_code ec, std::size_t length){
                     if (!ec){
